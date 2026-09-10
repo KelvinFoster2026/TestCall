@@ -15,26 +15,42 @@ import { callAudioExists, generateSignedUrl, uploadCallAudio } from './s3.js';
 const API_BASE = 'https://api.elevenlabs.io/v1/text-to-speech';
 
 /**
- * The streaming endpoint, used even though we want the whole file.
+ * The PLAIN endpoint, not `/stream`, and the reason is audible.
  *
- * The plain endpoint generates the entire clip before it answers at all. The
- * `/stream` endpoint starts sending bytes as it generates them, and because a
- * chunked response finishes when the last chunk lands rather than when the
- * server decides to reply, the COMPLETE clip arrives sooner - measured on the
- * reply "Of course, what's your question?":
+ * The source used `/stream` for latency, on the reasoning that a chunked
+ * response completes when the last chunk lands rather than when the server
+ * decides to reply - measured then at 282 ms against 532 ms.
  *
- *   plain endpoint      first byte 527 ms   complete 532 ms
- *   /stream endpoint    first byte 210 ms   complete 282 ms
+ * The cost of that, which the measurement did not capture: **the streaming
+ * endpoint omits the Xing/Info frame.** It cannot write one, because that
+ * header records the total frame count and is only known once encoding has
+ * finished. Compared directly, same voice, same model, same output format:
  *
- * That is 250 ms off every spoken line, for a one-word change to a URL and no
- * change at all to the audio: same voice, same model, same settings, same bytes.
+ *   /stream  mp3_22050_32   gapless header: NONE
+ *   plain    mp3_22050_32   gapless header: Info
+ *   /stream  mp3_44100_64   gapless header: NONE
+ *   plain    mp3_44100_64   gapless header: Info
  *
- * Deliberately WITHOUT `optimize_streaming_latency`. Level 4 shaved a further
- * 39 ms and turns off the text normaliser, which is what reads "12 PM" as
- * "twelve PM". This call says times out loud on most turns, so 39 ms is not
- * worth risking how they are pronounced.
+ * Without that frame a decoder has no way to know the first ~1100 samples are
+ * encoder priming rather than audio, so it renders them - which on a phone is
+ * a click or a warble at the instant the voice starts, on every single clip.
+ * With it, the first frame a decoder meets is silent metadata and the priming
+ * is skipped.
+ *
+ * And the latency it was traded for is no longer there. Re-measured on this
+ * voice and model, four runs each, cache-busted:
+ *
+ *   /stream   mean 375 ms   median 350 ms
+ *   plain     mean 397 ms   median 391 ms
+ *
+ * 22 ms, not 250. Whatever the original gap was, it has closed, and 22 ms is
+ * not worth a glitch on the first word the caller hears.
+ *
+ * Still deliberately WITHOUT `optimize_streaming_latency`, which turns off the
+ * text normaliser - the thing that reads "12 PM" as "twelve PM". This call says
+ * times out loud on most turns.
  */
-const STREAM_SUFFIX = '/stream';
+const STREAM_SUFFIX = '';
 
 /**
  * Phone audio is 8kHz, so 44.1kHz/128 buys nothing a caller can hear and makes
@@ -169,9 +185,23 @@ export async function synthesizeSpeech(
   // Content-addressed, so the key changes the moment the wording, the voice or
   // the model does. A cached hit is the same bytes the API would have returned -
   // which is also why pointing this at the production bucket is safe.
+  //
+  // PIPELINE is part of the key because the inputs alone do not identify the
+  // bytes: the same text, voice, model and speed produce a clip WITHOUT a
+  // gapless header through `/stream` and one WITH it through the plain
+  // endpoint. Objects cached before that change are the glitching ones, and
+  // without this they would go on being served for every fixed line - the fix
+  // would appear to work on the opening, which is never cached, and appear to
+  // do nothing on the replies, which always are.
+  //
+  // Bumping this is how any future change to how audio is PRODUCED, rather than
+  // to what it says, retires the clips that came before it. Old objects are
+  // left alone rather than overwritten, since the bucket is shared with
+  // production.
+  const PIPELINE = 'v2-plain-endpoint';
   const cacheKey = input.cacheable
     ? `consult-calls/audio/cached/${createHash('sha256')
-        .update(`${voiceId}:${modelId}:${speed}:${text}`)
+        .update(`${PIPELINE}:${voiceId}:${modelId}:${speed}:${text}`)
         .digest('hex')}.mp3`
     : null;
 
