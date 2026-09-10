@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TestCall</title>
+    <style>
+      :root {
+        --ink: #1f2328;
+        --muted: #8b9198;
+        --line: #e4e6e9;
+        --bg: #f7f7f6;
+        --card: #ffffff;
+        --green: #1e8a63;
+        --rust: #b4552d;
+        --focus: rgba(30, 138, 99, 0.16);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 40px 20px 80px;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; }
+      h1 { font-size: 22px; letter-spacing: -0.01em; margin: 0 0 4px; }
+      .sub { color: var(--muted); margin: 0 0 28px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 1px 2px rgba(43, 37, 33, 0.03), 0 8px 28px rgba(43, 37, 33, 0.04);
+      }
+      .eyebrow {
+        font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+        text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+      }
+      label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+      input[type="tel"] {
+        width: 100%; height: 42px; padding: 0 12px; font: inherit;
+        border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink);
+      }
+      input[type="tel"]:focus { outline: none; border-color: #cbd0d6; box-shadow: 0 0 0 3px var(--focus); }
+      .row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+      .row > div:first-child { flex: 1 1 240px; }
+      button {
+        height: 42px; padding: 0 20px; font: inherit; font-weight: 500; cursor: pointer;
+        border: 1px solid var(--green); border-radius: 9px; background: var(--green); color: #fff;
+      }
+      button:hover:not(:disabled) { background: #19764f; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13.5px; color: #4a5057; }
+      .check input { width: 16px; height: 16px; accent-color: var(--green); }
+      .error {
+        margin-top: 14px; padding: 11px 13px; border-radius: 9px; font-size: 13.5px;
+        background: #fdf3ef; border: 1px solid #f0d7cb; color: #8f4223;
+      }
+      .setup { font-size: 13px; color: var(--muted); }
+      .setup div { display: flex; justify-content: space-between; padding: 3px 0; }
+      .ok { color: var(--green); font-weight: 500; }
+      .bad { color: var(--rust); font-weight: 500; }
+      .status-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+      .status { font-size: 17px; font-weight: 600; }
+      .meta { color: var(--muted); font-size: 13px; }
+      .summary {
+        margin-top: 12px; padding: 12px 14px; border-radius: 9px;
+        background: #f2f8f5; border: 1px solid #d8e9e1; font-size: 14px;
+      }
+      .turn { padding: 14px 0; border-top: 1px solid var(--line); }
+      .turn:first-child { border-top: none; padding-top: 4px; }
+      .said { color: var(--muted); font-size: 13.5px; margin-bottom: 5px; }
+      .said em { font-style: normal; color: #4a5057; }
+      .reply { font-size: 14.5px; }
+      .tag {
+        display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 20px;
+        font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+        background: #f1f2f3; color: var(--muted); vertical-align: middle;
+      }
+      .tag.fallback { background: #fdf3ef; color: var(--rust); }
+      .empty { color: var(--muted); font-size: 13.5px; }
+      code { background: #f1f2f3; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>TestCall</h1>
+      <p class="sub">
+        Rings your phone and has the confirmation conversation with you — Twilio for the line,
+        OpenAI for the words, ElevenLabs for the voice.
+      </p>
+
+      <div class="card">
+        <div class="eyebrow">Place a call</div>
+        <div class="row">
+          <div>
+            <label for="phone">Your phone number</label>
+            <input id="phone" type="tel" placeholder="+1 555 123 4567" autocomplete="tel" />
+          </div>
+          <button id="place">Place test call</button>
+        </div>
+        <div class="check">
+          <input id="override" type="checkbox" />
+          <label for="override" style="margin: 0; font-weight: 400">
+            Call outside normal hours
+          </label>
+        </div>
+        <div id="error" class="error" hidden></div>
+      </div>
+
+      <div class="card" id="setup-card">
+        <div class="eyebrow">Setup</div>
+        <div class="setup" id="setup">Checking…</div>
+      </div>
+
+      <div class="card" id="call-card" hidden>
+        <div class="eyebrow">This call</div>
+        <div class="status-line">
+          <span class="status" id="status">—</span>
+          <span class="meta" id="meta"></span>
+        </div>
+        <div class="meta" id="opening"></div>
+        <div class="summary" id="summary" hidden></div>
+      </div>
+
+      <div class="card" id="turns-card" hidden>
+        <div class="eyebrow">Transcript</div>
+        <div id="turns"></div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const API = '/api/v1/consults/admin';
+
+      /* Twilio's vocabulary is not what a person wants to read off a screen. */
+      const RESULT_LABEL = {
+        confirmed: 'Confirmed',
+        declined: 'Said no',
+        wrong_number: 'Wrong number',
+        voicemail: 'Voicemail',
+        no_response: 'No response',
+        no_answer: 'No answer',
+        busy: 'Busy',
+        failed: 'Failed',
+      };
+      const STATUS_LABEL = {
+        queued: 'Queued',
+        dialing: 'Dialing…',
+        ringing: 'Ringing…',
+        in_progress: 'On the call',
+        completed: 'Finished',
+        failed: 'Failed',
+      };
+      const IN_FLIGHT = ['queued', 'dialing', 'ringing', 'in_progress'];
+
+      let pollTimer = null;
+
+      async function loadSetup() {
+        try {
+          const cfg = await (await fetch(`${API}/config`)).json();
+          const row = (name, ok, note) =>
+            `<div><span>${name}</span><span class="${ok ? 'ok' : 'bad'}">${
+              ok ? 'ready' : note || 'not configured'
+            }</span></div>`;
+          $('setup').innerHTML =
+            row('Calling enabled', cfg.enabled, 'set CONSULT_CALL_ENABLED=true') +
+            row('Twilio voice', cfg.twilio) +
+            row('OpenAI', cfg.openai) +
+            row('ElevenLabs', cfg.elevenLabs) +
+            row('S3 audio storage', cfg.s3) +
+            row(
+              'Public webhook URL',
+              cfg.publicWebhookBaseUrl.startsWith('https://'),
+              'set PUBLIC_WEBHOOK_BASE_URL to your tunnel',
+            ) +
+            `<div><span>Calling hours</span><span>${cfg.hours.start}:00 – ${cfg.hours.end}:00 ET</span></div>`;
+        } catch {
+          $('setup').textContent = 'Could not reach the server.';
+        }
+      }
+
+      function render(call) {
+        $('call-card').hidden = false;
+        $('status').textContent = call.result
+          ? RESULT_LABEL[call.result] || call.result
+          : STATUS_LABEL[call.status] || call.status;
+
+        const bits = [call.toPhone];
+        if (call.durationSeconds !== null) bits.push(`${call.durationSeconds}s`);
+        if (call.answeredBy) bits.push(call.answeredBy);
+        if (call.voiceProvider === 'twilio-say') bits.push('fallback voice');
+        if (call.error) bits.push(call.error);
+        $('meta').textContent = bits.join(' · ');
+        $('opening').textContent = call.opening ? `Opened with: “${call.opening}”` : '';
+
+        $('summary').hidden = !call.summary;
+        $('summary').textContent = call.summary || '';
+
+        $('turns-card').hidden = call.turns.length === 0;
+        $('turns').innerHTML = call.turns
+          .map((turn) => {
+            const heard = turn.digits
+              ? `pressed ${esc(turn.digits)}`
+              : turn.speechResult
+                ? `“<em>${esc(turn.speechResult)}</em>”${
+                    turn.confidence !== null
+                      ? ` · ${Math.round(turn.confidence * 100)}% confident`
+                      : ''
+                  }`
+                : 'said nothing';
+            const tag =
+              turn.replyVoice === 'twilio-say'
+                ? '<span class="tag fallback">stock voice</span>'
+                : '';
+            const note = turn.note ? `<span class="tag">${esc(turn.note)}</span>` : '';
+            return `<div class="turn">
+              <div class="said">You: ${heard}</div>
+              <div class="reply">${esc(turn.reply || '')}${tag}${note}</div>
+            </div>`;
+          })
+          .join('');
+      }
+
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"']/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+        );
+
+      /* Polls until the call reaches a terminal state, mirroring the admin tab. */
+      function poll(id) {
+        clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+          try {
+            const call = await (await fetch(`${API}/calls/${id}`)).json();
+            render(call);
+            if (!IN_FLIGHT.includes(call.status)) {
+              clearInterval(pollTimer);
+              $('place').disabled = false;
+              $('place').textContent = 'Place test call';
+            }
+          } catch {
+            /* A blip should not stop the poll; the next tick tries again. */
+          }
+        }, 2000);
+      }
+
+      async function place() {
+        $('error').hidden = true;
+        $('place').disabled = true;
+        $('place').textContent = 'Placing…';
+        try {
+          const response = await fetch(`${API}/calls/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toPhone: $('phone').value,
+              overrideHours: $('override').checked,
+            }),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.message || 'That call could not be placed.');
+          render(body);
+          poll(body.id);
+        } catch (error) {
+          // Rendered verbatim: several of these messages carry the only
+          // instruction that will fix the problem.
+          $('error').textContent = error.message;
+          $('error').hidden = false;
+          $('place').disabled = false;
+          $('place').textContent = 'Place test call';
+        }
+      }
+
+      $('place').addEventListener('click', place);
+      $('phone').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') place();
+      });
+      loadSetup();
+    </script>
+  </body>
+</html>

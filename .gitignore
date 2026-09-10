@@ -1,0 +1,16 @@
+# Secrets. Never commit: this file holds live Twilio, OpenAI, ElevenLabs and AWS keys.
+.env
+.env.local
+.env.*.local
+
+node_modules/
+dist/
+
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
