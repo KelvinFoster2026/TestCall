@@ -182,6 +182,22 @@ export async function synthesizeSpeech(
     ? Math.min(1.2, Math.max(0.7, configuredSpeed))
     : DEFAULT_SPEED;
 
+  /*
+   * Every delivery setting, stated.
+   *
+   * Sending a partial `voice_settings` does not leave the rest neutral - the
+   * API fills them from the voice's own saved values, which are invisible from
+   * here and can be changed in someone's dashboard without a deploy. Naming all
+   * of them makes the call sound the same tomorrow as it does today.
+   */
+  const voiceSettings = {
+    speed,
+    stability: clamp(config.elevenLabs.stability, 0, 1),
+    similarity_boost: clamp(config.elevenLabs.similarityBoost, 0, 1),
+    style: clamp(config.elevenLabs.style, 0, 1),
+    use_speaker_boost: config.elevenLabs.speakerBoost,
+  };
+
   // Content-addressed, so the key changes the moment the wording, the voice or
   // the model does. A cached hit is the same bytes the API would have returned -
   // which is also why pointing this at the production bucket is safe.
@@ -198,10 +214,10 @@ export async function synthesizeSpeech(
   // to what it says, retires the clips that came before it. Old objects are
   // left alone rather than overwritten, since the bucket is shared with
   // production.
-  const PIPELINE = 'v2-plain-endpoint';
+  const PIPELINE = 'v3-plain-endpoint-explicit-settings';
   const cacheKey = input.cacheable
     ? `consult-calls/audio/cached/${createHash('sha256')
-        .update(`${PIPELINE}:${voiceId}:${modelId}:${speed}:${text}`)
+        .update(`${PIPELINE}:${voiceId}:${modelId}:${JSON.stringify(voiceSettings)}:${text}`)
         .digest('hex')}.mp3`
     : null;
 
@@ -223,7 +239,7 @@ export async function synthesizeSpeech(
         {
           method: 'POST',
           headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, model_id: modelId, voice_settings: { speed } }),
+          body: JSON.stringify({ text, model_id: modelId, voice_settings: voiceSettings }),
         },
       );
 
@@ -288,6 +304,11 @@ async function readError(response: Response): Promise<string> {
     // Falls through to the status line below.
   }
   return `ElevenLabs speech failed with status ${response.status}`;
+}
+
+/** Keeps a mistyped env value out of the request body, where it would 422. */
+function clamp(value: number, low: number, high: number): number {
+  return Number.isFinite(value) ? Math.min(high, Math.max(low, value)) : low;
 }
 
 async function timedFetch(url: string, init: RequestInit): Promise<Response> {

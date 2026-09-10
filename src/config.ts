@@ -87,6 +87,29 @@ export const config = {
     modelId: str('ELEVENLABS_MODEL_ID', 'eleven_flash_v2_5'),
     /** Clamped to 0.7-1.2 at the call site, so a typo slows the voice rather than 422ing. */
     speed: num('ELEVENLABS_SPEED', 0.9),
+
+    /*
+     * Delivery, sent explicitly rather than left to the voice's own defaults.
+     *
+     * These were omitted before, which does not mean "neutral" - it means the
+     * API fills them in from whatever is saved on the voice, which nothing in
+     * this codebase can see or control. A voice saved with an expressive style
+     * reads a confirmation like a commercial: energetic, and stretching words
+     * it decides to land on, which is where "Daaaawn" comes from.
+     *
+     * stability   how much the delivery varies run to run. Low is expressive
+     *             and theatrical; high is even and a little flat. A person
+     *             ringing to check a calendar slot should be closer to flat.
+     * style       exaggeration. Zero for this. Anything above it is performance,
+     *             and it is also the setting that stretches vowels.
+     * similarity  how hard it clings to the original timbre. High can drag
+     *             recording artifacts along with it.
+     * speakerBoost adds presence, and on an 8kHz phone line mostly adds edge.
+     */
+    stability: num('ELEVENLABS_STABILITY', 0.7),
+    similarityBoost: num('ELEVENLABS_SIMILARITY_BOOST', 0.75),
+    style: num('ELEVENLABS_STYLE', 0),
+    speakerBoost: str('ELEVENLABS_SPEAKER_BOOST') === 'true',
   },
 
   s3: {
